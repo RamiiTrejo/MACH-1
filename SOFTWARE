@@ -1,1 +1,359 @@
+#include <Arduino.h>
+// Pin del módulo MicroStart de JSumo
+const int pinModulo = 2;
 
+// ---------------- MULTIPLEXOR DE SENSORES ----------------
+// Este multiplexor permite leer hasta 16 sensores usando 1 solo pin analógico
+
+const int OP = A4;  // Salida del multiplexor (se conecta al ADC)
+
+const int S0 = A0;  // Selección canal multiplexor
+const int S1 = A1;
+const int S2 = A2;
+const int S3 = A3;
+
+
+// ---------------- LEDS DE ESTADO ----------------
+
+const int led1 = 4;   // LED asociado al botón START
+const int led2 = 7;   // LED asociado al botón STOP
+const int led3 = 8;   // LED asociado al botón CALIBRAR
+
+
+// ---------------- PUENTES H BTS7960 ----------------
+// Controlan los motores del robot
+
+const int pini = 5;   // Dirección motor izquierdo
+const int pwmi = 6;   // PWM motor izquierdo
+
+const int pind = 9;   // Dirección motor derecho
+const int pwmd = 10;  // PWM motor derecho
+
+
+// ---------------- BOTONES ----------------
+
+const int SW1 = 13;   // Botón START
+const int SW2 = 12;   // Botón STOP
+const int SW3 = 11;   // Botón CALIBRAR
+
+
+// ---------------- TURBINA ----------------
+// MOSFET que activa el motor de turbina
+
+const int TUR = 3;
+
+// ============================================================
+// PARAMETROS DEL ROBOT
+// ============================================================
+
+int velocidad = 120;  // Velocidad base del robot (0-255)
+
+// Parámetros del controlador PID
+
+float Kp = 2.0;       // Ganancia proporcional
+float Kd = 9.97;      // Ganancia derivativa
+
+// Velocidades auxiliares
+
+int frente = 100;
+int reversa = 78;
+
+// Tipo de línea
+// 1 = línea negra
+// 2 = línea blanca
+
+int color = 2;
+
+
+// ============================================================
+// VARIABLES DE FUNCIONAMIENTO
+// ============================================================
+
+// Estado del robot
+bool robotActivo = false;
+
+// Indica si los sensores ya fueron calibrados
+bool calibrado = false;
+
+// Arreglo donde se guardan las lecturas de los sensores
+int sensores[16];
+
+// Valores mínimos detectados durante calibración
+int minSensor[16];
+
+// Valores máximos detectados durante calibración
+int maxSensor[16];
+
+// Variables PID
+float error = 0;
+float errorAnterior = 0;
+
+// Posición calculada de la línea
+int posicion = 0;
+
+
+// ============================================================
+// FUNCION PARA SELECCIONAR SENSOR EN EL MULTIPLEXOR
+// ============================================================
+
+void seleccionarSensor(int canal)
+{
+  // Configura los pines del multiplexor
+  // para elegir qué sensor leer
+
+  digitalWrite(S0, canal & 1);
+  digitalWrite(S1, canal & 2);
+  digitalWrite(S2, canal & 4);
+  digitalWrite(S3, canal & 8);
+}
+
+
+// ============================================================
+// FUNCION PARA LEER UN SENSOR
+// ============================================================
+
+int leerSensor(int canal)
+{
+  seleccionarSensor(canal);   // selecciona canal del multiplexor
+
+  delayMicroseconds(5);       // pequeño tiempo de estabilización
+
+  return analogRead(OP);      // lectura analógica del sensor
+}
+
+
+// ============================================================
+// FUNCION PARA LEER TODOS LOS SENSORES
+// ============================================================
+
+void leerSensores()
+{
+  for(int i=0;i<16;i++)
+  {
+    sensores[i] = leerSensor(i);
+  }
+}
+
+
+// ============================================================
+// CALIBRACION DE SENSORES
+// ============================================================
+
+void calibrarSensores()
+{
+  // Enciende LED de calibración
+  digitalWrite(led3, HIGH);
+
+  // Lee sensores muchas veces para obtener valores reales
+  for(int j=0;j<100;j++)
+  {
+    for(int i=0;i<16;i++)
+    {
+      int val = leerSensor(i);
+
+      // Primera lectura inicializa min y max
+      if(j==0)
+      {
+        minSensor[i] = val;
+        maxSensor[i] = val;
+      }
+
+      // Guarda mínimo detectado
+      if(val < minSensor[i]) minSensor[i] = val;
+
+      // Guarda máximo detectado
+      if(val > maxSensor[i]) maxSensor[i] = val;
+    }
+  }
+
+  calibrado = true;
+
+  // Apaga LED
+  digitalWrite(led3, LOW);
+}
+
+
+// ============================================================
+// CALCULAR POSICION DE LA LINEA
+// ============================================================
+
+int calcularPosicion()
+{
+  long suma = 0;
+  long pesos = 0;
+
+  for(int i=0;i<16;i++)
+  {
+    int val = sensores[i];
+
+    // Normaliza lectura entre 0 y 1000
+    val = map(val, minSensor[i], maxSensor[i], 0, 1000);
+
+    if(val < 0) val = 0;
+    if(val > 1000) val = 1000;
+
+    // calcula posición ponderada
+    suma += val * (i * 1000);
+    pesos += val;
+  }
+
+  // evita división por cero
+  if(pesos == 0) return posicion;
+
+  posicion = suma / pesos;
+
+  return posicion;
+}
+
+
+// ============================================================
+// CONTROL DE MOTORES
+// ============================================================
+
+void moverMotores(int izq, int der)
+{
+  // limita velocidad entre -255 y 255
+  izq = constrain(izq, -255, 255);
+  der = constrain(der, -255, 255);
+
+  // Motor izquierdo
+  if(izq >= 0)
+  {
+    digitalWrite(pini, HIGH);
+    analogWrite(pwmi, izq);
+  }
+  else
+  {
+    digitalWrite(pini, LOW);
+    analogWrite(pwmi, -izq);
+  }
+
+  // Motor derecho
+  if(der >= 0)
+  {
+    digitalWrite(pind, HIGH);
+    analogWrite(pwmd, der);
+  }
+  else
+  {
+    digitalWrite(pind, LOW);
+    analogWrite(pwmd, -der);
+  }
+}
+
+
+// ============================================================
+// CONTROL PID DE LA LINEA
+// ============================================================
+
+void controlLinea()
+{
+  // Leer sensores
+  leerSensores();
+
+  // Calcular posición de línea
+  int pos = calcularPosicion();
+
+  // Error respecto al centro
+  error = pos - 7500;
+
+  // Derivada
+  float derivada = error - errorAnterior;
+
+  // Corrección PID
+  int correccion = Kp * error + Kd * derivada;
+
+  // Ajustar velocidad de motores
+  int velIzq = velocidad + correccion;
+  int velDer = velocidad - correccion;
+
+  moverMotores(velIzq, velDer);
+
+  errorAnterior = error;
+}
+
+void setup()
+{
+
+  // Configuración multiplexor
+  pinMode(S0, OUTPUT);
+  pinMode(S1, OUTPUT);
+  pinMode(S2, OUTPUT);
+  pinMode(S3, OUTPUT);
+  //
+  pinMode(OP, INPUT);
+
+  // LEDs
+  pinMode(led1, OUTPUT);
+  pinMode(led2, OUTPUT);
+  pinMode(led3, OUTPUT);
+
+  // Botones
+  pinMode(SW1, INPUT);
+  pinMode(SW2, INPUT);
+  pinMode(SW3, INPUT);
+
+  // Motores
+  pinMode(pini, OUTPUT);
+  pinMode(pwmi, OUTPUT);
+  pinMode(pind, OUTPUT);
+  pinMode(pwmd, OUTPUT);
+
+  // Turbina
+  pinMode(TUR, OUTPUT);
+
+  // MicroStart
+  pinMode(pinModulo, INPUT);
+
+  digitalWrite(TUR, LOW);
+}
+
+
+void loop()
+{
+
+  // Espera señal del módulo MicroStart
+  if(!robotActivo)
+  {
+    if(digitalRead(pinModulo) == HIGH)
+    {
+      robotActivo = true;
+
+      // LED start
+      digitalWrite(led1, HIGH);
+
+      // activa turbina
+      digitalWrite(TUR, HIGH);
+    }
+  }
+
+  // BOTON START
+  if(digitalRead(SW1) == LOW)
+  {
+    robotActivo = true;
+    digitalWrite(led1, HIGH);
+  }
+
+  // BOTON STOP
+  if(digitalRead(SW2) == LOW)
+  {
+    robotActivo = false;
+
+    moverMotores(0,0);
+
+    digitalWrite(led2, HIGH);
+  }
+
+  // BOTON CALIBRAR
+  if(digitalRead(SW3) == LOW)
+  {
+    calibrarSensores();
+  }
+
+  // Si el robot está activo y calibrado sigue la línea
+  if(robotActivo && calibrado)
+  {
+    controlLinea();
+  }
+
+}
