@@ -3,3 +3,6 @@ Proyecto de robot seguidor de línea de alta velocidad, orientado a competencias
 
 # Objetivos
 Desarrollar un vehículo autónomo capaz de detectar y seguir una trayectoria con alta precisión y velocidad, optimizando tanto el hardware como el software para lograr un desempeño competitivo.
+
+
+![IMG-20260402-WA0009](https://github.com/user-attachments/assets/d9252f9e-0781-474f-bb83-8a57d2065d83)
