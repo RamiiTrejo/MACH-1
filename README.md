@@ -1,6 +1,5 @@
 # Mach-1
-Este proyecto consiste en el desarrollo de un robot seguidor de línea de alta velocidad (tipo velocista), diseñado específicamente para competir en carreras de LNR (Line Follower Racing) en categoría profesional, incorporando sistemas avanzados como turbina de succión para mejorar la adherencia al suelo.
+Proyecto de robot seguidor de línea de alta velocidad, orientado a competencias de Line Follower Racing (LNR). Está diseñado para la categoría profesional, incorporando soluciones avanzadas como un sistema de succión que mejora la adherencia y el rendimiento en pista.
 
 # Objetivos
-
-El objetivo principal es construir un vehículo autónomo capaz de detectar, interpretar y seguir una trayectoria marcada en el suelo (generalmente una línea negra sobre fondo blanco) a la mayor velocidad posible, optimizando tanto el hardware como el software para lograr un desempeño competitivo.
+Desarrollar un vehículo autónomo capaz de detectar y seguir una trayectoria con alta precisión y velocidad, optimizando tanto el hardware como el software para lograr un desempeño competitivo.
