@@ -1,40 +1,177 @@
-#include <Arduino.h>
-// Pin del módulo MicroStart de JSumo
-const int pinModulo = 2;
+// ---------------- PINES ----------------
+const int sensores[] = {A0,A1,A2,A3,A4,A5,A6,A7};
+const int numSensores = 8;
 
-// ---------------- MULTIPLEXOR DE SENSORES ----------------
-// Este multiplexor permite leer hasta 16 sensores usando 1 solo pin analógico
+// Motores BTS7960
+const int MI_A = 5;
+const int MI_B = 6;
+const int MD_A = 9;
+const int MD_B = 10;
 
-const int OP = A4;  // Salida del multiplexor (se conecta al ADC)
+// Otros
+const int MICROSTART = 2;
+const int TURBINA = 3;
 
-const int S0 = A0;  // Selección canal multiplexor
-const int S1 = A1;
-const int S2 = A2;
-const int S3 = A3;
+const int SW_NEGRO = 13;
+const int SW_BLANCO = 12;
+const int SW_START = 11;
 
+const int LED1 = 4;
+const int LED2 = 7;
+const int LED3 = 8;
 
-// ---------------- LEDS DE ESTADO ----------------
+// ---------------- VARIABLES ----------------
+int minVal[8], maxVal[8];
+int valores[8];
 
-const int led1 = 4;   // LED asociado al botón START
-const int led2 = 7;   // LED asociado al botón STOP
-const int led3 = 8;   // LED asociado al botón CALIBRAR
+int velocidadBase = 100;
 
+float Kp = 0.08;
+float Kd = 0.6;
 
-// ---------------- PUENTES H BTS7960 ----------------
-// Controlan los motores del robot
+int errorAnterior = 0;
+bool iniciado = false;
 
-const int pini = 5;   // Dirección motor izquierdo
-const int pwmi = 6;   // PWM motor izquierdo
+// ---------------- SETUP ----------------
+void setup() {
+  Serial.begin(9600);
 
-const int pind = 9;   // Dirección motor derecho
-const int pwmd = 10;  // PWM motor derecho
+  pinMode(MI_A, OUTPUT); pinMode(MI_B, OUTPUT);
+  pinMode(MD_A, OUTPUT); pinMode(MD_B, OUTPUT);
 
+  pinMode(MICROSTART, INPUT_PULLUP);
+  pinMode(TURBINA, OUTPUT);
 
-// ---------------- BOTONES ----------------
+  pinMode(SW_NEGRO, INPUT_PULLUP);
+  pinMode(SW_BLANCO, INPUT_PULLUP);
+  pinMode(SW_START, INPUT_PULLUP);
 
-const int SW1 = 13;   // Botón START
-const int SW2 = 12;   // Botón STOP
-const int SW3 = 11;   // Botón CALIBRAR
+  pinMode(LED1, OUTPUT);
+  pinMode(LED2, OUTPUT);
+  pinMode(LED3, OUTPUT);
+}
+
+// ---------------- LOOP ----------------
+void loop() {
+
+  // -------- MODO A: BOTONES --------
+  if (!digitalRead(SW_NEGRO)) calibrarNegro();
+  if (!digitalRead(SW_BLANCO)) calibrarBlanco();
+
+  if (!digitalRead(SW_START)) iniciarRobot();
+
+  // -------- MODO B: MICROSTART --------
+  if (!digitalRead(MICROSTART)) iniciarRobot();
+
+  if (iniciado) {
+    seguirLinea();
+  }
+}
+
+// ---------------- CALIBRACIONES ----------------
+void calibrarNegro() {
+  digitalWrite(LED1, HIGH);
+  delay(300);
+
+  for (int i=0;i<numSensores;i++) {
+    minVal[i] = analogRead(sensores[i]);
+  }
+
+  digitalWrite(LED1, LOW);
+}
+
+void calibrarBlanco() {
+  digitalWrite(LED2, HIGH);
+  delay(300);
+
+  for (int i=0;i<numSensores;i++) {
+    maxVal[i] = analogRead(sensores[i]);
+  }
+
+  digitalWrite(LED2, LOW);
+}
+
+// ---------------- INICIO ----------------
+void iniciarRobot() {
+  iniciado = true;
+
+  digitalWrite(LED3, HIGH);   // LED inicio
+  digitalWrite(TURBINA, HIGH); // activa turbina
+}
+
+// ---------------- LECTURA ----------------
+void leerSensores() {
+  for (int i=0;i<numSensores;i++) {
+    int val = analogRead(sensores[i]);
+
+    // normalización
+    val = constrain(map(val, minVal[i], maxVal[i], 0, 1000), 0, 1000);
+
+    valores[i] = val;
+  }
+}
+
+// ---------------- POSICIÓN ----------------
+int calcularPosicion() {
+  long suma = 0;
+  long peso = 0;
+
+  for (int i=0;i<numSensores;i++) {
+    int v = valores[i];
+
+    suma += (long)v * (i * 1000);
+    peso += v;
+  }
+
+  if (peso == 0) {
+    return (errorAnterior < 0) ? 0 : 7000;
+  }
+
+  return suma / peso;
+}
+
+// ---------------- CONTROL ----------------
+void seguirLinea() {
+  leerSensores();
+
+  int posicion = calcularPosicion();
+  int error = posicion - 3500;
+
+  int derivada = error - errorAnterior;
+  int ajuste = (Kp * error) + (Kd * derivada);
+
+  errorAnterior = error;
+
+  int velIzq = velocidadBase + ajuste;
+  int velDer = velocidadBase - ajuste;
+
+  moverMotores(velIzq, velDer);
+}
+
+// ---------------- MOTORES ----------------
+void moverMotores(int izq, int der) {
+
+  izq = constrain(izq, -255, 255);
+  der = constrain(der, -255, 255);
+
+  // IZQUIERDO
+  if (izq > 0) {
+    analogWrite(MI_A, izq);
+    analogWrite(MI_B, 0);
+  } else {
+    analogWrite(MI_A, 0);
+    analogWrite(MI_B, -izq);
+  }
+
+  // DERECHO
+  if (der > 0) {
+    analogWrite(MD_A, der);
+    analogWrite(MD_B, 0);
+  } else {
+    analogWrite(MD_A, 0);
+    analogWrite(MD_B, -der);
+  }
+}const int SW3 = 11;   // Botón CALIBRAR
 
 
 // ---------------- TURBINA ----------------
