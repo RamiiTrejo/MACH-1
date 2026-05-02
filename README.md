@@ -13,3 +13,4 @@ Desarrollar un vehículo autónomo capaz de detectar y seguir una trayectoria co
 - MOTOR CORELESS 8520
 - TURBINA CON MOTOR CORELESS 716
 - REGLETA QTR8A
+- BATERÍA 2 350mAh~450mAh
