@@ -8,3 +8,7 @@ Desarrollar un vehículo autónomo capaz de detectar y seguir una trayectoria co
 
 # Componentes
 - ATMEGA238P, AU
+- TA6586
+- MOTOR CORELESS 8520
+- TURBINA CON MOTOR CORELESS 716
+- REGLETA QTR8A
