@@ -5,3 +5,6 @@ Proyecto de robot seguidor de línea de alta velocidad, orientado a competencias
 
 # Objetivos
 Desarrollar un vehículo autónomo capaz de detectar y seguir una trayectoria con alta precisión y velocidad, optimizando tanto el hardware como el software para lograr un desempeño competitivo.
+
+# Componentes
+- ATMEGA238P, AU
